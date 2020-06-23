@@ -2078,7 +2078,7 @@ struct resolver_factory {
             }
          }
 
-         return std::make_optional<abi_serializer>();
+         return std::optional<abi_serializer>();
       };
    }
 };

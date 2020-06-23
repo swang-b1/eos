@@ -350,7 +350,7 @@ namespace fc
         explicit variant( const std::optional<T>& v )
         {
            memset( this, 0, sizeof(*this) );
-           if( v ) *this = variant(*v);
+           if( v.has_value() ) *this = variant(*v);
         }
 
         template<typename T>
@@ -390,7 +390,7 @@ namespace fc
    template<typename T>
    void from_variant( const variant& var,  std::optional<T>& vo )
    {
-      if( var.is_null() ) vo = std::make_optional<T>();
+      if( var.is_null() ) vo = std::optional<T>();
       else
       {
           vo = T();
