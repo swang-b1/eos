@@ -3,7 +3,7 @@
 
 namespace eosio { namespace chain {
 
-   void chain_config::validate()const {
+   void chain_config_v0::validate() const {
       EOS_ASSERT( target_block_net_usage_pct <= config::percent_100, action_validate_exception,
                   "target block net usage percentage cannot exceed 100%" );
       EOS_ASSERT( target_block_net_usage_pct >= config::percent_1/10, action_validate_exception,
@@ -36,6 +36,12 @@ namespace eosio { namespace chain {
 
       EOS_ASSERT( 1 <= max_authority_depth, action_validate_exception,
                   "max authority depth should be at least 1" );
+}
+
+void chain_config_v1::validate() const {
+   chain_config::validate();
+   EOS_ASSERT( action_return_value_size_limit <= MAX_SIZE_OF_BYTE_ARRAYS, action_validate_exception,
+               "action return value size limit must be less or equal to ${value}", ("value", MAX_SIZE_OF_BYTE_ARRAYS));
 }
 
 } } // namespace eosio::chain

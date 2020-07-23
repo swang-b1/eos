@@ -12,7 +12,7 @@ namespace eosio { namespace chain {
  * their preference for each of the parameters in this object, and the blockchain runs according to the median of the
  * values specified by the producers.
  */
-struct chain_config {
+struct chain_config_v0 {
    uint64_t   max_block_net_usage;                 ///< the maxiumum net usage in instructions for a block
    uint32_t   target_block_net_usage_pct;          ///< the target percent (1% == 100, 100%= 10,000) of maximum net usage; exceeding this triggers congestion handling
    uint32_t   max_transaction_net_usage;           ///< the maximum objectively measured net usage that the chain will allow regardless of account limits
@@ -35,8 +35,14 @@ struct chain_config {
 
    void validate()const;
 
+   inline const chain_config_v0& v0() const {
+      return *this;
+   }
+
+   //chain_config_v0& operator = (const chain_config_v0& rhs) = default;
+
    template<typename Stream>
-   friend Stream& operator << ( Stream& out, const chain_config& c ) {
+   friend Stream& operator << ( Stream& out, const chain_config_v0& c ) {
       return out << "Max Block Net Usage: " << c.max_block_net_usage << ", "
                  << "Target Block Net Usage Percent: " << ((double)c.target_block_net_usage_pct / (double)config::percent_1) << "%, "
                  << "Max Transaction Net Usage: " << c.max_transaction_net_usage << ", "
@@ -57,7 +63,7 @@ struct chain_config {
                  << "Max Authority Depth: " << c.max_authority_depth << "\n";
    }
 
-   friend inline bool operator ==( const chain_config& lhs, const chain_config& rhs ) {
+   friend inline bool operator ==( const chain_config_v0& lhs, const chain_config_v0& rhs ) {
       return   std::tie(   lhs.max_block_net_usage,
                            lhs.target_block_net_usage_pct,
                            lhs.max_transaction_net_usage,
@@ -97,13 +103,42 @@ struct chain_config {
                         );
    };
 
-   friend inline bool operator !=( const chain_config& lhs, const chain_config& rhs ) { return !(lhs == rhs); }
+   friend inline bool operator !=( const chain_config_v0& lhs, const chain_config_v0& rhs ) { return !(lhs == rhs); }
 
 };
 
+struct chain_config_v1 : chain_config_v0 {
+   using Base = chain_config_v0;
+   std::uint32_t action_return_value_size_limit = MAX_SIZE_OF_BYTE_ARRAYS;
+
+   inline const Base& base() const {
+      return static_cast<const Base&>(*this);
+   }
+
+   void validate() const;
+
+   template<typename Stream>
+   friend Stream& operator << ( Stream& out, const chain_config_v1& c ) {
+      return out << c.base() << "Action Return Value Size = " << c.action_return_value_size_limit << "\n";
+   }
+
+   friend inline bool operator == ( const chain_config_v1& lhs, const chain_config_v1& rhs ) {
+      return lhs.base() == rhs.base() &&
+             std::tie(lhs.action_return_value_size_limit) ==
+             std::tie(rhs.action_return_value_size_limit);
+   }
+
+   inline chain_config_v1& operator= (const Base& b) {
+      Base::operator= (b);
+      return *this;
+   }
+};
+
+using chain_config = chain_config_v1;
+
 } } // namespace eosio::chain
 
-FC_REFLECT(eosio::chain::chain_config,
+FC_REFLECT(eosio::chain::chain_config_v0,
            (max_block_net_usage)(target_block_net_usage_pct)
            (max_transaction_net_usage)(base_per_transaction_net_usage)(net_usage_leeway)
            (context_free_discount_net_usage_num)(context_free_discount_net_usage_den)
@@ -113,5 +148,8 @@ FC_REFLECT(eosio::chain::chain_config,
 
            (max_transaction_lifetime)(deferred_trx_expiration_window)(max_transaction_delay)
            (max_inline_action_size)(max_inline_action_depth)(max_authority_depth)
+)
 
+FC_REFLECT_DERIVED(eosio::chain::chain_config_v1, (eosio::chain::chain_config_v0),
+                  (action_return_value_size_limit)
 )
