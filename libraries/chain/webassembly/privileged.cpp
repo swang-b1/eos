@@ -230,13 +230,36 @@ namespace eosio { namespace chain { namespace webassembly {
       });
    }
    
-   uint32_t get_parameters_packed( span<const char> packed_parameter_ids, span<char> packed_parameters) const{
-      //TODO: implement
+   uint32_t interface::get_parameters_packed( span<const char> packed_parameter_ids, span<char> packed_parameters) const{
+      std::vector<uint32_t> ids;
+      datastream<const char*> ds_ids( packed_parameter_ids.data(), packed_parameter_ids.size() );
+      fc::raw::unpack(ds_ids, ids);
+
+      chain::chain_config cfg = context.control.get_global_properties().configuration;
+      chain::data_range<chain::chain_config> config_range(cfg, ids);
+      
+      auto size = fc::raw::pack_size( config_range );
+      if( packed_parameters.size() == 0 ) return size;
+
+      if ( size <= packed_parameters.size() ){
+         datastream<char*> ds( packed_parameters.data(), size );
+         fc::raw::pack( ds, config_range );
+      }
+
       return 0;
    }
 
-   void set_parameters_packed( span<const char> packed_parameters ){
-      //TODO: implement
+   void interface::set_parameters_packed( span<const char> packed_parameters ){
+      datastream<const char*> ds( packed_parameters.data(), packed_parameters.size() );
+      chain::chain_config cfg = context.control.get_global_properties().configuration;
+      chain::data_range<chain::chain_config> config_range(cfg);
+      fc::raw::unpack(ds, config_range);
+      
+      config_range.config.validate();
+      context.db.modify( context.control.get_global_properties(),
+         [&]( auto& gprops ) {
+              gprops.configuration = config_range.config;
+      });
    }
 
    auto kv_parameters_impl(name db) {

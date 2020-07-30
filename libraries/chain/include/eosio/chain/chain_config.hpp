@@ -2,6 +2,7 @@
 
 #include <eosio/chain/types.hpp>
 #include <eosio/chain/config.hpp>
+#include <eosio/chain/chain_config_helper.hpp>
 
 namespace eosio { namespace chain {
 
@@ -136,20 +137,62 @@ struct chain_config_v1 : chain_config_v0 {
 
 using chain_config = chain_config_v1;
 
+#define CHAIN_CONFIG_V0_MEMBERS()\
+            (max_block_net_usage)(target_block_net_usage_pct)\
+            (max_transaction_net_usage)(base_per_transaction_net_usage)(net_usage_leeway)\
+            (context_free_discount_net_usage_num)(context_free_discount_net_usage_den)\
+            (max_block_cpu_usage)(target_block_cpu_usage_pct)\
+            (max_transaction_cpu_usage)(min_transaction_cpu_usage)\
+            (max_transaction_lifetime)(deferred_trx_expiration_window)(max_transaction_delay)\
+            (max_inline_action_size)(max_inline_action_depth)(max_authority_depth)
+
+SELECTION_MAP(chain_config_v0, CHAIN_CONFIG_V0_MEMBERS())
+
+#define CHAIN_CONFIG_V1_MEMBERS()\
+            (action_return_value_size_limit)
+
+SELECTION_MAP_DERIVED(chain_config_v0, chain_config_v1, CHAIN_CONFIG_V1_MEMBERS())
+
 } } // namespace eosio::chain
 
-FC_REFLECT(eosio::chain::chain_config_v0,
-           (max_block_net_usage)(target_block_net_usage_pct)
-           (max_transaction_net_usage)(base_per_transaction_net_usage)(net_usage_leeway)
-           (context_free_discount_net_usage_num)(context_free_discount_net_usage_den)
+FC_REFLECT(eosio::chain::chain_config_v0, CHAIN_CONFIG_V0_MEMBERS())
+FC_REFLECT_DERIVED(eosio::chain::chain_config_v1, (eosio::chain::chain_config_v0), CHAIN_CONFIG_V1_MEMBERS())
 
-           (max_block_cpu_usage)(target_block_cpu_usage_pct)
-           (max_transaction_cpu_usage)(min_transaction_cpu_usage)
+namespace fc {
 
-           (max_transaction_lifetime)(deferred_trx_expiration_window)(max_transaction_delay)
-           (max_inline_action_size)(max_inline_action_depth)(max_authority_depth)
-)
+SELECTION_PACK(eosio::chain::chain_config_v0, CHAIN_CONFIG_V0_MEMBERS())
+SELECTION_UNPACK(eosio::chain::chain_config_v0, CHAIN_CONFIG_V0_MEMBERS())
+SELECTION_PACK(eosio::chain::chain_config_v1, CHAIN_CONFIG_V1_MEMBERS())
+SELECTION_UNPACK(eosio::chain::chain_config_v1, CHAIN_CONFIG_V1_MEMBERS())
 
-FC_REFLECT_DERIVED(eosio::chain::chain_config_v1, (eosio::chain::chain_config_v0),
-                  (action_return_value_size_limit)
-)
+/**
+ * Packed config stream is in the following format:
+ * |uint32_t:sequence_length | uint32_t:parameter_id | <various>:parameter_value | ... 
+ * all parameters are optional
+ */
+template<typename DataStream, typename T>
+inline DataStream& operator<<( DataStream& s, const eosio::chain::data_range<T>& selection ) {
+   
+   fc::raw::pack(s, selection.ids.size());
+   for (auto id : selection.ids){
+      fc::raw::pack(s, id);
+      fc::raw::pack(s, eosio::chain::data_entry(selection.config, id));
+   }
+
+   return s;
+}
+
+template<typename DataStream, typename T>
+inline DataStream& operator>>( DataStream& s, eosio::chain::data_range<T>& selection ) {
+   uint32_t length;
+   fc::raw::unpack(s, length);
+
+   for (auto i = 0; i < length; ++i) {
+      uint32_t param_id;
+      fc::raw::unpack(s, param_id);
+      fc::raw::unpack(s, selection);
+   }
+   return s;
+}
+
+} //namespace fc
