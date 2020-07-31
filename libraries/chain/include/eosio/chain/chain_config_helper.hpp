@@ -47,6 +47,7 @@ inline DataStream& operator<<( DataStream& s, const eosio::chain::data_entry<CLA
 #define SELECTION_PACK(CLASS, MEMBERS)\
 SELECTION_PACK_DERIVED(std::false_type, CLASS, MEMBERS)
 
+//TODO: add to CASE_UNPACK check for future protocol being active
 #define CASE_UNPACK(r, CLASS, MEMBER)\
 if (eosio::chain::field_id<&CLASS::MEMBER>() == entry.id){\
    fc::raw::unpack(s, entry.config.MEMBER);\
@@ -55,10 +56,11 @@ if (eosio::chain::field_id<&CLASS::MEMBER>() == entry.id){\
 
 #define SELECTION_UNPACK_DERIVED(BASE, CLASS, MEMBERS)\
 template<typename DataStream>\
-inline DataStream& operator>>( DataStream& s, const eosio::chain::data_entry<CLASS>& entry ) {\
+inline DataStream& operator>>( DataStream& s, eosio::chain::data_entry<CLASS>& entry ) {\
    BOOST_PP_SEQ_FOR_EACH(CASE_UNPACK, CLASS, MEMBERS)\
    if constexpr (std::is_base_of<BASE, CLASS>()) {\
-      fc::raw::unpack(s, eosio::chain::data_entry<BASE>((BASE&)entry.config, entry.id));\
+      eosio::chain::data_entry<BASE> cfg_entry((BASE&)entry.config, entry.id);\
+      fc::raw::unpack(s, cfg_entry);\
       return s;\
    }\
    FC_THROW_EXCEPTION(eosio::chain::config_parse_error, "DataStream& operator<<: no such id: ${id}", ("id", entry.id));\

@@ -236,17 +236,18 @@ namespace eosio { namespace chain { namespace webassembly {
       fc::raw::unpack(ds_ids, ids);
 
       chain::chain_config cfg = context.control.get_global_properties().configuration;
-      chain::data_range<chain::chain_config> config_range(cfg, ids);
+      const chain::data_range<chain::chain_config> config_range(cfg, ids);
       
       auto size = fc::raw::pack_size( config_range );
       if( packed_parameters.size() == 0 ) return size;
 
-      if ( size <= packed_parameters.size() ){
-         datastream<char*> ds( packed_parameters.data(), size );
-         fc::raw::pack( ds, config_range );
-      }
-
-      return 0;
+      EOS_ASSERT(size <= packed_parameters.size(),
+                 chain::config_parse_error,
+                 "get_parameters_packed: buffer size is smaller than ${size}", ("size", size));
+      
+      datastream<char*> ds( packed_parameters.data(), size );
+      fc::raw::pack( ds, config_range );
+      return size;
    }
 
    void interface::set_parameters_packed( span<const char> packed_parameters ){

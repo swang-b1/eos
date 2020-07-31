@@ -129,6 +129,10 @@ struct chain_config_v1 : chain_config_v0 {
              std::tie(rhs.action_return_value_size_limit);
    }
 
+   friend inline bool operator != ( const chain_config_v1& lhs, const chain_config_v1& rhs ) {
+      return !(lhs == rhs);
+   }
+
    inline chain_config_v1& operator= (const Base& b) {
       Base::operator= (b);
       return *this;
@@ -172,10 +176,11 @@ SELECTION_UNPACK(eosio::chain::chain_config_v1, CHAIN_CONFIG_V1_MEMBERS())
  */
 template<typename DataStream, typename T>
 inline DataStream& operator<<( DataStream& s, const eosio::chain::data_range<T>& selection ) {
-   
-   fc::raw::pack(s, selection.ids.size());
+   fc::unsigned_int size = selection.ids.size();
+   fc::raw::pack(s, size);
    for (auto id : selection.ids){
-      fc::raw::pack(s, id);
+      //TODO: add protection against duplication of id
+      fc::raw::pack(s, fc::unsigned_int(id) );
       fc::raw::pack(s, eosio::chain::data_entry(selection.config, id));
    }
 
@@ -184,13 +189,15 @@ inline DataStream& operator<<( DataStream& s, const eosio::chain::data_range<T>&
 
 template<typename DataStream, typename T>
 inline DataStream& operator>>( DataStream& s, eosio::chain::data_range<T>& selection ) {
-   uint32_t length;
+   fc::unsigned_int length;
    fc::raw::unpack(s, length);
 
-   for (auto i = 0; i < length; ++i) {
-      uint32_t param_id;
-      fc::raw::unpack(s, param_id);
-      fc::raw::unpack(s, selection);
+   for (uint32_t i = 0; i < length; ++i) {
+      fc::unsigned_int id;
+      fc::raw::unpack(s, id);
+      //TODO: add protection against duplication of id
+      eosio::chain::data_entry<T> cfg_entry(selection.config, id);
+      fc::raw::unpack(s, cfg_entry);
    }
    return s;
 }
