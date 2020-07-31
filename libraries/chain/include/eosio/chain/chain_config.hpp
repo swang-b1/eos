@@ -176,12 +176,20 @@ SELECTION_UNPACK(eosio::chain::chain_config_v1, CHAIN_CONFIG_V1_MEMBERS())
  */
 template<typename DataStream, typename T>
 inline DataStream& operator<<( DataStream& s, const eosio::chain::data_range<T>& selection ) {
+   using namespace eosio::chain;
+   
    fc::unsigned_int size = selection.ids.size();
    fc::raw::pack(s, size);
+
+   //vector here serves as hash map where key is always an index
+   std::vector<bool> visited(selection_map_size<T>(), false);
    for (auto id : selection.ids){
-      //TODO: add protection against duplication of id
-      fc::raw::pack(s, fc::unsigned_int(id) );
-      fc::raw::pack(s, eosio::chain::data_entry(selection.config, id));
+      EOS_ASSERT(id < visited.size(), config_parse_error, "provided id ${id} should be less than ${size}", ("id", id)("size", visited.size()));
+      EOS_ASSERT(!visited[id], config_parse_error, "duplicate id provided: ${id}", ("id", id));
+      visited[id] = true;
+
+      fc::raw::pack(s, fc::unsigned_int(id));
+      fc::raw::pack(s, data_entry(selection.config, id));
    }
 
    return s;
@@ -189,13 +197,21 @@ inline DataStream& operator<<( DataStream& s, const eosio::chain::data_range<T>&
 
 template<typename DataStream, typename T>
 inline DataStream& operator>>( DataStream& s, eosio::chain::data_range<T>& selection ) {
+   using namespace eosio::chain;
+   
    fc::unsigned_int length;
    fc::raw::unpack(s, length);
 
+   //vector here serves as hash map where key is always an index
+   std::vector<bool> visited(selection_map_size<T>(), false);
    for (uint32_t i = 0; i < length; ++i) {
       fc::unsigned_int id;
       fc::raw::unpack(s, id);
-      //TODO: add protection against duplication of id
+      
+      EOS_ASSERT(id.value < visited.size(), config_parse_error, "provided id ${id} should be less than ${size}", ("id", id)("size", visited.size()));
+      EOS_ASSERT(!visited[id], config_parse_error, "duplicate id provided: ${id}", ("id", id));
+      visited[id] = true;
+
       eosio::chain::data_entry<T> cfg_entry(selection.config, id);
       fc::raw::unpack(s, cfg_entry);
    }
