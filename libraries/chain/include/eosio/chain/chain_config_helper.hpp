@@ -49,15 +49,16 @@ RANGE_PACK_DERIVED(std::false_type, CLASS, MEMBERS)
 
 //TODO: add to CASE_UNPACK check for future protocol being active
 #define CASE_UNPACK(r, CLASS, MEMBER)\
-if (eosio::chain::field_id<&CLASS::MEMBER>() == entry.id){\
+case eosio::chain::field_id<&CLASS::MEMBER>():\
    fc::raw::unpack(s, entry.config.MEMBER);\
-   return s;\
-}
+   return s;
 
 #define RANGE_UNPACK_DERIVED(BASE, CLASS, MEMBERS)\
 template<typename DataStream>\
 inline DataStream& operator>>( DataStream& s, eosio::chain::data_entry<CLASS, eosio::chain::config_entry_validator>& entry ) {\
+   switch(entry.id){\
    BOOST_PP_SEQ_FOR_EACH(CASE_UNPACK, CLASS, MEMBERS)\
+   }\
    if constexpr (std::is_base_of<BASE, CLASS>()) {\
       eosio::chain::data_entry<BASE, eosio::chain::config_entry_validator> base_entry(entry);\
       fc::raw::unpack(s, base_entry);\
