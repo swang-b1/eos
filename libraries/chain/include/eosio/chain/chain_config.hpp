@@ -141,6 +141,14 @@ struct chain_config_v1 : chain_config_v0 {
 
 using chain_config = chain_config_v1;
 
+class controller;
+
+struct config_entry_validator{
+   const controller& control;
+
+   bool operator()(uint32_t id);
+};
+
 #define CHAIN_CONFIG_V0_MEMBERS()\
             (max_block_net_usage)(target_block_net_usage_pct)\
             (max_transaction_net_usage)(base_per_transaction_net_usage)(net_usage_leeway)\
@@ -150,12 +158,12 @@ using chain_config = chain_config_v1;
             (max_transaction_lifetime)(deferred_trx_expiration_window)(max_transaction_delay)\
             (max_inline_action_size)(max_inline_action_depth)(max_authority_depth)
 
-SELECTION_MAP(chain_config_v0, CHAIN_CONFIG_V0_MEMBERS())
+DEFINE_ENUM(chain_config_v0, CHAIN_CONFIG_V0_MEMBERS())
 
 #define CHAIN_CONFIG_V1_MEMBERS()\
             (action_return_value_size_limit)
 
-SELECTION_MAP_DERIVED(chain_config_v0, chain_config_v1, CHAIN_CONFIG_V1_MEMBERS())
+DEFINE_ENUM_DERIVED(chain_config_v0, chain_config_v1, CHAIN_CONFIG_V1_MEMBERS())
 
 } } // namespace eosio::chain
 
@@ -164,10 +172,10 @@ FC_REFLECT_DERIVED(eosio::chain::chain_config_v1, (eosio::chain::chain_config_v0
 
 namespace fc {
 
-SELECTION_PACK(eosio::chain::chain_config_v0, CHAIN_CONFIG_V0_MEMBERS())
-SELECTION_UNPACK(eosio::chain::chain_config_v0, CHAIN_CONFIG_V0_MEMBERS())
-SELECTION_PACK(eosio::chain::chain_config_v1, CHAIN_CONFIG_V1_MEMBERS())
-SELECTION_UNPACK(eosio::chain::chain_config_v1, CHAIN_CONFIG_V1_MEMBERS())
+RANGE_PACK(eosio::chain::chain_config_v0, CHAIN_CONFIG_V0_MEMBERS())
+RANGE_UNPACK(eosio::chain::chain_config_v0, CHAIN_CONFIG_V0_MEMBERS())
+RANGE_PACK(eosio::chain::chain_config_v1, CHAIN_CONFIG_V1_MEMBERS())
+RANGE_UNPACK(eosio::chain::chain_config_v1, CHAIN_CONFIG_V1_MEMBERS())
 
 /**
  * Packed config stream is in the following format:
@@ -175,35 +183,35 @@ SELECTION_UNPACK(eosio::chain::chain_config_v1, CHAIN_CONFIG_V1_MEMBERS())
  * all parameters are optional
  */
 template<typename DataStream, typename T>
-inline DataStream& operator<<( DataStream& s, const eosio::chain::data_range<T>& selection ) {
+inline DataStream& operator<<( DataStream& s, const eosio::chain::data_range<T, eosio::chain::config_entry_validator>& selection ) {
    using namespace eosio::chain;
    
    fc::unsigned_int size = selection.ids.size();
    fc::raw::pack(s, size);
 
    //vector here serves as hash map where key is always an index
-   std::vector<bool> visited(selection_map_size<T>(), false);
+   std::vector<bool> visited(enum_size<T>(), false);
    for (auto id : selection.ids){
       EOS_ASSERT(id < visited.size(), config_parse_error, "provided id ${id} should be less than ${size}", ("id", id)("size", visited.size()));
       EOS_ASSERT(!visited[id], config_parse_error, "duplicate id provided: ${id}", ("id", id));
       visited[id] = true;
 
       fc::raw::pack(s, fc::unsigned_int(id));
-      fc::raw::pack(s, data_entry(selection.config, id));
+      fc::raw::pack(s, data_entry(selection.config, id, selection.validator));
    }
 
    return s;
 }
 
 template<typename DataStream, typename T>
-inline DataStream& operator>>( DataStream& s, eosio::chain::data_range<T>& selection ) {
+inline DataStream& operator>>( DataStream& s, eosio::chain::data_range<T, eosio::chain::config_entry_validator>& selection ) {
    using namespace eosio::chain;
    
    fc::unsigned_int length;
    fc::raw::unpack(s, length);
 
    //vector here serves as hash map where key is always an index
-   std::vector<bool> visited(selection_map_size<T>(), false);
+   std::vector<bool> visited(enum_size<T>(), false);
    for (uint32_t i = 0; i < length; ++i) {
       fc::unsigned_int id;
       fc::raw::unpack(s, id);
@@ -212,7 +220,7 @@ inline DataStream& operator>>( DataStream& s, eosio::chain::data_range<T>& selec
       EOS_ASSERT(!visited[id], config_parse_error, "duplicate id provided: ${id}", ("id", id));
       visited[id] = true;
 
-      eosio::chain::data_entry<T> cfg_entry(selection.config, id);
+      eosio::chain::data_entry<T, config_entry_validator> cfg_entry(selection.config, id, selection.validator);
       fc::raw::unpack(s, cfg_entry);
    }
    return s;

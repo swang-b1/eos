@@ -17,7 +17,7 @@
 
 namespace bh = boost::hana;
 
-namespace eosio { namespace chain { 
+namespace eosio { namespace chain {
 
 /* 
  * currently OFFSETOF_IMPL is pointed to the offsetof builtin.
@@ -33,19 +33,19 @@ if (eosio::chain::field_id<&CLASS::MEMBER>() == entry.id){\
    return s;\
 }
 
-#define SELECTION_PACK_DERIVED(BASE, CLASS, MEMBERS)\
+#define RANGE_PACK_DERIVED(BASE, CLASS, MEMBERS)\
 template<typename DataStream>\
-inline DataStream& operator<<( DataStream& s, const eosio::chain::data_entry<CLASS>& entry ) {\
+inline DataStream& operator<<( DataStream& s, const eosio::chain::data_entry<CLASS, eosio::chain::config_entry_validator>& entry ) {\
    BOOST_PP_SEQ_FOR_EACH(CASE_PACK, CLASS, MEMBERS)\
    if constexpr (std::is_base_of<BASE, CLASS>()) {\
-      fc::raw::pack(s, eosio::chain::data_entry<BASE>((BASE&)entry.config, entry.id));\
+      fc::raw::pack(s, eosio::chain::data_entry<BASE, eosio::chain::config_entry_validator>(entry));\
       return s;\
    }\
    FC_THROW_EXCEPTION(eosio::chain::config_parse_error, "DataStream& operator<<: no such id: ${id}", ("id", entry.id));\
 }
 
-#define SELECTION_PACK(CLASS, MEMBERS)\
-SELECTION_PACK_DERIVED(std::false_type, CLASS, MEMBERS)
+#define RANGE_PACK(CLASS, MEMBERS)\
+RANGE_PACK_DERIVED(std::false_type, CLASS, MEMBERS)
 
 //TODO: add to CASE_UNPACK check for future protocol being active
 #define CASE_UNPACK(r, CLASS, MEMBER)\
@@ -54,24 +54,24 @@ if (eosio::chain::field_id<&CLASS::MEMBER>() == entry.id){\
    return s;\
 }
 
-#define SELECTION_UNPACK_DERIVED(BASE, CLASS, MEMBERS)\
+#define RANGE_UNPACK_DERIVED(BASE, CLASS, MEMBERS)\
 template<typename DataStream>\
-inline DataStream& operator>>( DataStream& s, eosio::chain::data_entry<CLASS>& entry ) {\
+inline DataStream& operator>>( DataStream& s, eosio::chain::data_entry<CLASS, eosio::chain::config_entry_validator>& entry ) {\
    BOOST_PP_SEQ_FOR_EACH(CASE_UNPACK, CLASS, MEMBERS)\
    if constexpr (std::is_base_of<BASE, CLASS>()) {\
-      eosio::chain::data_entry<BASE> cfg_entry((BASE&)entry.config, entry.id);\
-      fc::raw::unpack(s, cfg_entry);\
+      eosio::chain::data_entry<BASE, eosio::chain::config_entry_validator> base_entry(entry);\
+      fc::raw::unpack(s, base_entry);\
       return s;\
    }\
    FC_THROW_EXCEPTION(eosio::chain::config_parse_error, "DataStream& operator<<: no such id: ${id}", ("id", entry.id));\
 }
 
-#define SELECTION_UNPACK(CLASS, MEMBERS)\
-SELECTION_UNPACK_DERIVED(std::false_type, CLASS, MEMBERS)
+#define RANGE_UNPACK(CLASS, MEMBERS)\
+RANGE_UNPACK_DERIVED(std::false_type, CLASS, MEMBERS)
 
 #define ENUM_PAIR2(r, CLASS, ID, MEMBER, BASE)\
    bh::make_pair(bh::size_c<OFFSETOF_IMPL(CLASS, MEMBER)>,\
-                 bh::size_c<selection_map_size<BASE>() + ID>),
+                 bh::size_c<enum_size<BASE>() + ID>),
 
 #define ENUM_PAIR_DERIVED(r, BASE_DERIVED, ID, MEMBER)\
 ENUM_PAIR2(r, BOOST_PP_SEQ_ELEM(1, BASE_DERIVED), ID, MEMBER, BOOST_PP_SEQ_ELEM(0, BASE_DERIVED))
@@ -84,21 +84,21 @@ constexpr size_t field_id<&CLASS::MEMBER>(){\
    return *found;\
 }
 
-#define SELECTION_MAP_DERIVED(BASE, DERIVED, MEMBERS)\
+#define DEFINE_ENUM_DERIVED(BASE, DERIVED, MEMBERS)\
 constexpr auto DERIVED##_MAP = bh::make_map(\
    BOOST_PP_SEQ_FOR_EACH_I(ENUM_PAIR_DERIVED, (BASE)(DERIVED), MEMBERS)\
    bh::make_pair(bh::size_c<sizeof(DERIVED)>, bh::size_c<BOOST_PP_SEQ_SIZE(MEMBERS)>)\
 );\
 BOOST_PP_SEQ_FOR_EACH_I(DEFINE_FIELD_ID, DERIVED, MEMBERS)\
 template<>\
-constexpr size_t selection_map_size<DERIVED>(){\
+constexpr size_t enum_size<DERIVED>(){\
    auto t = bh::size_c<sizeof(DERIVED)>;\
    auto found = bh::find(DERIVED##_MAP, t);\
    return *found;\
 }
 
-#define SELECTION_MAP(CLASS, MEMBERS)\
-SELECTION_MAP_DERIVED(void, CLASS, MEMBERS)
+#define DEFINE_ENUM(CLASS, MEMBERS)\
+DEFINE_ENUM_DERIVED(void, CLASS, MEMBERS)
 
 /**
  * Returns field in in the structure
@@ -114,40 +114,66 @@ constexpr size_t field_id(){
 /**
  * Returns size of id/offset map
  * Map type is boost::hana's map
- * See SELECTION_MAP_DERIVED macro for implementation
+ * See DEFINE_ENUM_DERIVED macro for implementation
  */
 template<typename T>
-constexpr size_t selection_map_size(){
-   FC_THROW_EXCEPTION(config_parse_error, "only specializations of selection_map_size can be used");
+constexpr size_t enum_size(){
+   FC_THROW_EXCEPTION(config_parse_error, "only specializations of enum_size can be used");
    return 0;
 }
 /**
  * this specialization is used for classed with no base class
  */
 template<>
-constexpr size_t selection_map_size<void>(){
+constexpr size_t enum_size<void>(){
    return 0;
 }
 
 /**
  * helper class to serialize only selected ids of the class
  */
-template<typename T>
+template<typename T, typename Validator>
 struct data_range {
+
    T& config;
    vector<uint32_t> ids;
-   data_range(T& c) : config(c){}
-   data_range(T& c, vector<uint32_t>& id_list) : config(c), ids(id_list) {}
+   Validator validator;
+
+   data_range(T& c, Validator val) : config(c), validator(val){}
+   data_range(T& c, vector<uint32_t>&& id_list, const Validator& val) 
+      : data_range(c, val){
+      ids = std::move(id_list);
+   }
 };
 
 /**
  * helper class to serialize specific class entry
  */
-template<typename T>
+template<typename T, typename Validator>
 struct data_entry {
+private:
+   struct _dummy{};
+public:
+
    T& config;
    uint32_t id;
-   data_entry(T& c, uint32_t entry_id) : config(c), id(entry_id) {}
+   Validator validator;
+   data_entry(T& c, uint32_t entry_id, Validator validate)
+    : config(c), 
+      id(entry_id), 
+      validator(validate) {}
+   template <typename Y>
+   explicit data_entry(const data_entry<Y, Validator>& another, 
+              typename std::enable_if_t<std::is_base_of_v<T, Y>, _dummy> = _dummy{})
+    : data_entry(another.config, another.id, another.validator)
+   {}
+   template <typename Y>
+   explicit data_entry(const data_entry<Y, Validator>& another, 
+              typename std::enable_if_t<!std::is_base_of_v<T, Y>, _dummy> = _dummy{})
+    : config(std::forward<T&>(T{})) {
+      FC_THROW_EXCEPTION(eosio::chain::config_parse_error, 
+      "this constructor only for compilation of template magic and shouldn't ever be called");
+   }
 };
 
 }} // namespace eosio::chain
