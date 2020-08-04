@@ -45,7 +45,7 @@ void chain_config_v1::validate() const {
                "action return value size limit must be less or equal to ${value}", ("value", MAX_SIZE_OF_BYTE_ARRAYS));
 }
 
-bool config_entry_validator::operator()(uint32_t id){
+bool config_entry_validator::operator()(uint32_t id) const {
    switch(id){
       case field_id<&chain_config_v1::action_return_value_size_limit>():
       return control.is_builtin_activated(builtin_protocol_feature_t::action_return_value);

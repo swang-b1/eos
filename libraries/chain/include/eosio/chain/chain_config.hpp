@@ -146,7 +146,7 @@ class controller;
 struct config_entry_validator{
    const controller& control;
 
-   bool operator()(uint32_t id);
+   bool operator()(uint32_t id) const;
 };
 
 #define CHAIN_CONFIG_V0_MEMBERS()\

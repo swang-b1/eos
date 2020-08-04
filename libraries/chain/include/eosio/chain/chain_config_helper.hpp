@@ -36,6 +36,7 @@ if (eosio::chain::field_id<&CLASS::MEMBER>() == entry.id){\
 #define RANGE_PACK_DERIVED(BASE, CLASS, MEMBERS)\
 template<typename DataStream>\
 inline DataStream& operator<<( DataStream& s, const eosio::chain::data_entry<CLASS, eosio::chain::config_entry_validator>& entry ) {\
+   EOS_ASSERT(entry.is_allowed(), eosio::chain::unsupported_feature, "config id ${id} is no allowed", ("id", entry.id));\
    BOOST_PP_SEQ_FOR_EACH(CASE_PACK, CLASS, MEMBERS)\
    if constexpr (std::is_base_of<BASE, CLASS>()) {\
       fc::raw::pack(s, eosio::chain::data_entry<BASE, eosio::chain::config_entry_validator>(entry));\
@@ -56,6 +57,7 @@ case eosio::chain::field_id<&CLASS::MEMBER>():\
 #define RANGE_UNPACK_DERIVED(BASE, CLASS, MEMBERS)\
 template<typename DataStream>\
 inline DataStream& operator>>( DataStream& s, eosio::chain::data_entry<CLASS, eosio::chain::config_entry_validator>& entry ) {\
+   EOS_ASSERT(entry.is_allowed(), eosio::chain::unsupported_feature, "config id ${id} is no allowed", ("id", entry.id));\
    switch(entry.id){\
    BOOST_PP_SEQ_FOR_EACH(CASE_UNPACK, CLASS, MEMBERS)\
    }\
@@ -174,6 +176,10 @@ public:
     : config(std::forward<T&>(T{})) {
       FC_THROW_EXCEPTION(eosio::chain::config_parse_error, 
       "this constructor only for compilation of template magic and shouldn't ever be called");
+   }
+
+   bool is_allowed() const{
+      return validator(id);
    }
 };
 
